@@ -1,4 +1,4 @@
-selenium
-XlsxWriter
-pywin32
-webdriver-manager
+selenium>=4.6.1
+XlsxWriter>=3.0.3
+pywin32 > 1.0; sys_platform == "win32"
+webdriver-manager>=3.4.2
