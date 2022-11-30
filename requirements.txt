@@ -1,0 +1,4 @@
+selenium
+XlsxWriter
+pywin32
+webdriver-manager
