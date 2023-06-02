@@ -11,6 +11,7 @@ from xlsxwriter import Workbook
 from xlsxwriter.utility import xl_rowcol_to_cell
 import os
 import win32com.client as win32
+import argparse
 
 
 # TODO: Add explicit wait for selenium
@@ -46,11 +47,11 @@ class SBFScraper:
         town_dict = dict(zip(town_details[::2], town_details[1::2]))
         town_dict['Remaining Lease'] = self.parse_lease(town_dict['Remaining Lease'])
         town_dict['Est months'] = ''
-        if 'available' not in town_dict['Est. Completion Date'].lower():
-            town_dict['Est. Completion Date'] = self.parse_dates(town_dict['Est. Completion Date'])
+        if 'available' not in town_dict['Probable Completion Date'].lower():
+            town_dict['Probable Completion Date'] = self.parse_dates(town_dict['Probable Completion Date'])
             town_dict['Keys Available'] = False
         else:
-            town_dict['Est. Completion Date'] = ''
+            town_dict['Probable Completion Date'] = ''
             town_dict['Keys Available'] = True
 
         return town_dict
@@ -225,4 +226,9 @@ class SBFScraper:
         excel.Application.Quit()
 
 
-SBFScraper(filename='NOV22_SBF.xlsx').run()
+if __name__ == '__main__':
+    # get file naem from args
+    parser = argparse.ArgumentParser()
+    parser.add_argument("filename", help="Name of file to save to")
+    args = parser.parse_args()
+    SBFScraper(filename=args.filename).run()
