@@ -1,9 +1,8 @@
 import os
-import win32com.client as win32
-import argparse
 import time
 import re
 import datetime
+import logging
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.service import Service as ChromeService
@@ -17,7 +16,7 @@ from selenium.common.exceptions import (
 from webdriver_manager.chrome import ChromeDriverManager
 from xlsxwriter import Workbook
 from xlsxwriter.utility import xl_rowcol_to_cell
-
+import win32com.client as win32
 from tqdm import tqdm
 
 
@@ -218,9 +217,7 @@ class SBFScraper:
         list
             list of units
         """
-        all_blocks = self._wait_element(
-            By.XPATH, "//*[@id='available-grid']"
-        ).text
+        all_blocks = self._wait_element(By.XPATH, "//*[@id='available-grid']").text
         flat_list = re.split("#", all_blocks)
         flat_list = self.remove_null(flat_list)
         list_of_flats = []
@@ -239,10 +236,10 @@ class SBFScraper:
         int
             _description_
         """
-        return self._wait_element(By.XPATH,
-        "/html/body/app-root/div[2]/app-sbf-details/section/div/div[3]/div[1]/div/div/div/div[3]/table").\
-        text.\
-        split(sep=' ')[-1]
+        return self._wait_element(
+            By.XPATH,
+            "/html/body/app-root/div[2]/app-sbf-details/section/div/div[3]/div[1]/div/div/div/div[3]/table",
+        ).text.split(sep=" ")[-1]
 
     @staticmethod
     def get_flats(floor_level_list) -> list:
@@ -296,12 +293,12 @@ class SBFScraper:
         """
         Parse date to get date in datetime format
         Converts formats such as "Q1 2021" to datetime
-        
+
         Parameters
         ----------
         date : str
             date in string format
-        
+
         Returns
         -------
         datetime
@@ -315,19 +312,19 @@ class SBFScraper:
             _date = re.split(r" to |/", date)[-2:]
             date = datetime.datetime(int(_date[1]), int(_date[0]), 1)
         return date
-        
+
     @staticmethod
     def parse_lease(lease: str) -> int:
         """
         Parse lease to get remaining lease in months
         If lease is range A - B, then returns B
         Else returns only one value
-        
+
         Parameters
         ----------
         lease : str
             lease in string format
-        
+
         Returns
         -------
         int
@@ -335,13 +332,11 @@ class SBFScraper:
         """
         return int(re.findall("\d+", lease)[-1])
 
+    def _wait_elements(self, by, selector):
+        return self._wait.until(EC.presence_of_all_elements_located((by, selector)))
 
-    def _wait_elements(self,by, selector):
-        return self._wait.until(EC.presence_of_all_elements_located((by,selector)))
-
-    def _wait_element(self,by, selector):
-        return self._wait.until(EC.presence_of_element_located((by,selector)))
-
+    def _wait_element(self, by, selector):
+        return self._wait.until(EC.presence_of_element_located((by, selector)))
 
     def run(self):
         """
@@ -358,7 +353,7 @@ class SBFScraper:
             )
         )
         sel.select_by_value("50")
-        print("Getting list of towns...")
+        logging.info("Getting list of towns...")
         time.sleep(1)
         list_of_links = []
         while True:
@@ -371,9 +366,10 @@ class SBFScraper:
                 break
             time.sleep(1)
 
+        logging.info("Total number of towns: %s", len(list_of_links))
         # Internal functions have their own loops
         # for loop by town, then by flat type, then by block, then by unit
-        print("Running through every town...")
+        logging.info("Running through every town...")
         final_list = []
         tic = time.perf_counter()
         for link in tqdm(list_of_links):
@@ -387,17 +383,21 @@ class SBFScraper:
                     final_list.extend(dict_by_town)
                     break
                 except AssertionError as assertion_error:
-                    print(assertion_error)
-                    print(f"Error at {link}")
+                    logging.debug(assertion_error)
+                    logging.info("Error at %s", link)
                     self._faulty_links.append(link) if retries == 2 else None
                     retries += 1
-        print(
-            f"{len(final_list)} flats found. Took {time.perf_counter() - tic:.2f} seconds"
+        logging.info(
+            "%s flats found. Took %.2f seconds",
+            len(final_list),
+            time.perf_counter() - tic,
         )
         if len(final_list) == self._initial_units:
-            print(f"Correct number of units found")
+            logging.info("Correct number of units found")
         else:
-            print(f"Error: {self._initial_units - len(final_list)} units missing")
+            logging.info(
+                "Error: %d units missing", self._initial_units - len(final_list)
+            )
             with open("faulty_links.txt", "w") as f:
                 f.write("\n".join(self._faulty_links))
             print("Faulty links written to faulty_links.txt")
@@ -406,7 +406,7 @@ class SBFScraper:
         self._driver.quit()
 
         # 3. Parse data into xlsx
-        print("Parsing data into xlsx...")
+        logging.info("Parsing data into xlsx...")
         wb = Workbook(self._filename)
         ws = wb.add_worksheet("Raw Data")
         ordered_list = list(final_list[0].keys())
@@ -439,7 +439,7 @@ class SBFScraper:
         wb.close()
 
         # Autofit columns
-        print("Autofitting columns...")
+        logging.info("Autofitting columns...")
         excel = win32.gencache.EnsureDispatch("Excel.Application")
         wb = excel.Workbooks.Open(self._filename)
         ws = wb.Worksheets("Raw Data")
