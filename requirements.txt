@@ -1,5 +1,5 @@
 pywin32=>305
-selenium==4.9.1
+selenium==4.1.5
 tqdm==4.65.0
 webdriver_manager==3.8.6
 XlsxWriter==3.1.1
