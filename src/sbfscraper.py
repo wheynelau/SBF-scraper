@@ -230,6 +230,20 @@ class SBFScraper:
             list_of_flats.extend(self.get_flats(floor_level))
         return list_of_flats
 
+    def get_total_units(self) -> int:
+        """
+        This returns the total number of units on the page
+
+        Returns
+        -------
+        int
+            _description_
+        """
+        return self._wait_element(By.XPATH,
+        "/html/body/app-root/div[2]/app-sbf-details/section/div/div[3]/div[1]/div/div/div/div[3]/table").\
+        text.\
+        split(sep=' ')[-1]
+
     @staticmethod
     def get_flats(floor_level_list) -> list:
         """
