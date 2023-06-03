@@ -377,14 +377,20 @@ class SBFScraper:
         final_list = []
         tic = time.perf_counter()
         for link in tqdm(list_of_links):
-            try:
-                self._driver.get(link)
-                flat_details = self.scroll_flat_type(self.get_town_details())
-                dict_by_town = [x | {"Link": link} for x in flat_details]
-                final_list.extend(dict_by_town)
-            except Exception as e:
-                print(e)
-                print(f"Error at {link}")
+            retries = 0
+            while retries < 3:
+                try:
+                    self._driver.get(link)
+                    flat_details = self.scroll_flat_type(self.get_town_details())
+                    assert len(flat_details) == self.get_total_units()
+                    dict_by_town = [x | {"Link": link} for x in flat_details]
+                    final_list.extend(dict_by_town)
+                    break
+                except AssertionError as assertion_error:
+                    print(assertion_error)
+                    print(f"Error at {link}")
+                    self._faulty_links.append(link) if retries == 2 else None
+                    retries += 1
         print(
             f"{len(final_list)} flats found. Took {time.perf_counter() - tic:.2f} seconds"
         )
@@ -392,7 +398,13 @@ class SBFScraper:
             print(f"Correct number of units found")
         else:
             print(f"Error: {self._initial_units - len(final_list)} units missing")
+            with open("faulty_links.txt", "w") as f:
+                f.write("\n".join(self._faulty_links))
+            print("Faulty links written to faulty_links.txt")
+
+        # 2. Close driver
         self._driver.quit()
+
         # 3. Parse data into xlsx
         print("Parsing data into xlsx...")
         wb = Workbook(self._filename)
@@ -401,10 +413,10 @@ class SBFScraper:
 
         first_row = 0
         for header in ordered_list:
-            col = ordered_list.index(header)  # We are keeping order.
+            col = ordered_list.index(header)  # Keep order
             ws.write(
                 first_row, col, header
-            )  # We have written first row which is the header of worksheet also.
+            )  # written first row which is the header of worksheet also.
 
         date_format = wb.add_format({"num_format": "mm/dd/yyyy"})
 
