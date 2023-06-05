@@ -3,18 +3,14 @@ from src import SBFScraper
 import logging
 
 # set up logging
-logger = logging.getLogger(__name__)
-
-console_handler = logging.StreamHandler()
-console_handler.setLevel(logging.INFO)
-
-# Create a file handler and set its level to ERROR
-file_handler = logging.FileHandler('app.log')
-file_handler.setLevel(logging.ERROR)
-
-# Add the handlers to the logger
-logger.addHandler(console_handler)
-logger.addHandler(file_handler)
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler(),  # Output logs to the console
+        logging.FileHandler('logfile.log')  # Save logs to a log file
+    ]
+)
 
 if __name__ == "__main__":
     # get file naem from args
