@@ -44,22 +44,34 @@ class SBFScraper:
         headless : bool, optional
             _description_, by default False
         """
-        if filename:
-            self._filename = os.path.abspath(filename)
-        else:
+        if not filename:
             self._filename = os.path.abspath(
                 f"SBF_Scraped_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+            )
+        else:
+            # check if filename ends with .xlsx
+            self._filename = (
+                filename if filename.endswith(".xlsx") else filename + ".xlsx"
             )
         self._filename = os.path.join("outputs", self._filename)
         os.makedirs("outputs", exist_ok=True)
         self._headless = headless
         self._service = ChromeService(ChromeDriverManager().install())
         self._driver = webdriver.Chrome(service=self._service)
+        self._driver.maximize_window()
         self._wait = WebDriverWait(self._driver, 10)
         self._driver.get("https://homes.hdb.gov.sg/home/finding-a-flat")
         # self._driver.maximize_window()
         self._initial_units = self.get_sbf_units_n_click()
         self._faulty_links = []
+
+    def generate_headless_driver(self):
+        """
+        This function generates a headless driver
+        """
+        options = webdriver.ChromeOptions()
+        options.add_argument("start-minimized")
+        return webdriver.Chrome(service=self._service, options=options)
 
     def get_sbf_units_n_click(self) -> int:
         """
@@ -91,22 +103,17 @@ class SBFScraper:
         dict
             Dictionary of town details
         """
-        town_details = self._wait_element(
-            By.XPATH,
-            "/html/body/app-root/div[2]/app-sbf-details"
-            "/section/div/div[3]/div[1]/div/div/div/div[2]/div",
-        ).text.split(sep="\n")
-        town_dict = dict(zip(town_details[::2], town_details[1::2]))
-        town_dict["Remaining Lease"] = self.parse_lease(town_dict["Remaining Lease"])
-        town_dict["Est months"] = ""
-        if "available" not in town_dict["Probable Completion Date"].lower():
-            town_dict["Probable Completion Date"] = self.parse_dates(
-                town_dict["Probable Completion Date"]
-            )
-            town_dict["Keys Available"] = False
+        town_details = self._wait_element(By.XPATH,"/html/body/app-root/div[2]/app-sbf-details/section/div/div[3]/div[1]/div/div/div/div[2]/div").text.split(sep='\n')
+
+        town_dict = dict(zip(town_details[::2],town_details[1::2]))
+        town_dict['Remaining Lease'] = self.parse_lease(town_dict['Remaining Lease'])
+        town_dict['Est months'] = ''
+        if 'available' not in town_dict['Probable Completion Date'].lower():
+            town_dict['Probable Completion Date']= self.parse_dates(town_dict['Probable Completion Date'])
+            town_dict['Keys Available'] = False
         else:
-            town_dict["Probable Completion Date"] = ""
-            town_dict["Keys Available"] = True
+            town_dict['Probable Completion Date'] = ''
+            town_dict['Keys Available'] = True
 
         return town_dict
 
@@ -135,7 +142,7 @@ class SBFScraper:
         while True:
             try:
                 block_no_selector.select_by_value(str(value))
-                block_no_string = self._wait_element(
+                block_no_string = self._driver.find_element(
                     By.XPATH,
                     f"//*[@id='layout-block']/div[2]/"
                     f"div/div/div[3]/select/option[{value + 2}]",
@@ -170,24 +177,17 @@ class SBFScraper:
         list[dict]
             list of dictionaries of flat type details per town
         """
-        flat_type_selector = Select(
-            self._wait_element(
-                By.XPATH, "//*[@id='layout-block']/div[2]/div/div/div[1]/select"
-            )
-        )
+        flat_type_selector = Select(self._wait_element(By.XPATH,"//*[@id='layout-block']/div[2]/div/div/div[1]/select"))
         value = 0
         final_flat_block_LD = []
         while True:
             try:
                 flat_type_selector.select_by_value(str(value))
-                flat_type_string = self._wait_element(
-                    By.XPATH,
-                    f"//*[@id='layout-block']/"
-                    f"div[2]/div/div/div[1]/select/option[{value + 2}]",
-                ).text
-                flat_type_dict = town_dict | {"flat_type": flat_type_string}
+                flat_type_string = self._driver.find_element(
+                    By.XPATH,f"//*[@id='layout-block']/div[2]/div/div/div[1]/select/option[{value+2}]").text
+                flat_type_dict = town_dict|{"flat_type": flat_type_string}
                 final_flat_block_LD.extend(self.scroll_blocks(flat_type_dict))
-                value += 1
+                value+= 1
             except NoSuchElementException:
                 break
         return final_flat_block_LD
@@ -201,7 +201,7 @@ class SBFScraper:
         dict
             dictionary of the ethnic quota
         """
-        ethnic = self._wait_element(
+        ethnic = self._driver.find_element(
             By.XPATH, "//*[@id='available-sidebar']/div[1]/div[2]"
         ).text
         ethnic = re.split(r"\n|:", ethnic)
@@ -217,7 +217,7 @@ class SBFScraper:
         list
             list of units
         """
-        all_blocks = self._wait_element(By.XPATH, "//*[@id='available-grid']").text
+        all_blocks = self._driver.find_element(By.XPATH, "//*[@id='available-grid']").text
         flat_list = re.split("#", all_blocks)
         flat_list = self.remove_null(flat_list)
         list_of_flats = []
@@ -236,10 +236,10 @@ class SBFScraper:
         int
             _description_
         """
-        return self._wait_element(
+        return int(self._wait_element(
             By.XPATH,
             "/html/body/app-root/div[2]/app-sbf-details/section/div/div[3]/div[1]/div/div/div/div[3]/table",
-        ).text.split(sep=" ")[-1]
+        ).text.split(sep=" ")[-1])
 
     @staticmethod
     def get_flats(floor_level_list) -> list:
@@ -305,12 +305,12 @@ class SBFScraper:
             date in datetime format
         """
         if "Q" in date:
-            _date = re.split(r"Q/ | to ", date)[-2:]
-            date = datetime.datetime(int(_date[1]), int(_date[0]) * 3, 1)
+            _date = re.split(r'Q/| to ',date)[-2:]
+            date= datetime.datetime(int(_date[1]),int(_date[0])*3,1)
 
         else:
-            _date = re.split(r" to |/", date)[-2:]
-            date = datetime.datetime(int(_date[1]), int(_date[0]), 1)
+            _date = re.split(r' to |/',date)[-2:]
+            date= datetime.datetime(int(_date[1]),int(_date[0]),1)
         return date
 
     @staticmethod
@@ -344,27 +344,33 @@ class SBFScraper:
         """
         # 1. Get list of all towns
         # Select 50 towns per page for faster checking
-        sel = Select(
-            self._wait_element(
-                By.XPATH,
-                "/html/body/app-root/div[2]/app-find-my-flat/section/div/"
-                "app-search-results/div/div/div[3]/div/div[1]/div[1]"
-                "/div[2]/select",
+        if os.path.exists("towns.txt"):
+            with open("towns.txt", "r",encoding= 'utf-8') as f:
+                list_of_links = f.readlines()
+        else:
+            sel = Select(
+                self._wait_element(
+                    By.XPATH,
+                    "/html/body/app-root/div[2]/app-find-my-flat/section/div/"
+                    "app-search-results/div/div/div[3]/div/div[1]/div[1]"
+                    "/div[2]/select",
+                )
             )
-        )
-        sel.select_by_value("50")
-        logging.info("Getting list of towns...")
-        time.sleep(1)
-        list_of_links = []
-        while True:
-            for div in self._wait_elements(By.CLASS_NAME, "flat-link"):
-                list_of_links.append(div.get_attribute("href"))
-            try:
-                self._wait_element(By.CSS_SELECTOR, "[aria-label=Next]").click()
-            # if not clickable then break, meaning end of pages
-            except ElementClickInterceptedException:
-                break
+            sel.select_by_value("50")
+            logging.info("Getting list of towns...")
             time.sleep(1)
+            list_of_links = []
+            while True:
+                for div in self._wait_elements(By.CLASS_NAME, "flat-link"):
+                    list_of_links.append(div.get_attribute("href"))
+                try:
+                    self._wait_element(By.CSS_SELECTOR, "[aria-label=Next]").click()
+                # if not clickable then break, meaning end of pages
+                except ElementClickInterceptedException:
+                    break
+                time.sleep(1)
+            with open("towns.txt", "w",encoding= 'utf-8') as f:
+                f.write("\n".join(list_of_links))
 
         logging.info("Total number of towns: %s", len(list_of_links))
         # Internal functions have their own loops
@@ -373,19 +379,21 @@ class SBFScraper:
         final_list = []
         tic = time.perf_counter()
         for link in tqdm(list_of_links):
+            time.sleep(1)
             retries = 0
-            while retries < 3:
+            while retries < 5:
                 try:
                     self._driver.get(link)
                     flat_details = self.scroll_flat_type(self.get_town_details())
-                    assert len(flat_details) == self.get_total_units()
+                    assert len(flat_details) == self.get_total_units(), "Wrong number of units"
                     dict_by_town = [x | {"Link": link} for x in flat_details]
                     final_list.extend(dict_by_town)
                     break
-                except AssertionError as assertion_error:
-                    logging.debug(assertion_error)
+                except Exception as error:
+                    logging.error(error)
                     logging.info("Error at %s", link)
-                    self._faulty_links.append(link) if retries == 2 else None
+                    self._faulty_links.append(link) if retries == 4 else None
+                    time.sleep(retries*10)
                     retries += 1
         logging.info(
             "%s flats found. Took %.2f seconds",
@@ -393,14 +401,15 @@ class SBFScraper:
             time.perf_counter() - tic,
         )
         if len(final_list) == self._initial_units:
+            print("Correct number of units found")
             logging.info("Correct number of units found")
         else:
             logging.info(
                 "Error: %d units missing", self._initial_units - len(final_list)
             )
-            with open("faulty_links.txt", "w") as f:
+            with open("faulty_links.txt", "w", encoding='utf-8') as f:
                 f.write("\n".join(self._faulty_links))
-            print("Faulty links written to faulty_links.txt")
+            logging.info("Faulty links written to faulty_links.txt")
 
         # 2. Close driver
         self._driver.quit()
